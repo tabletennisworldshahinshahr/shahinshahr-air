@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Shahin Shahr Ultra Weather</title>
+    <link href="https://cdn.jsdelivr.net/gh/rastikerdar/vazirmatn@v33.003/Vazirmatn-font-face.css" rel="stylesheet" type="text/css" />
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/vanilla-tilt/1.8.0/vanilla-tilt.min.js"></script>
+
+    <style>
+        :root {
+            --text-primary: #ffffff;
+            --glass-bg: rgba(255, 255, 255, 0.08);
+            --glass-border: rgba(255, 255, 255, 0.15);
+            --accent: #4facfe;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Vazirmatn', sans-serif;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        body {
+            height: 100vh;
+            overflow: hidden;
+            background: #111; /* fallback */
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            position: relative;
+        }
+
+        /* --- پس‌زمینه‌های زنده --- */
+        .bg-layer {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            z-index: 1;
+            transition: opacity 1s ease;
+            opacity: 0;
+            background-size: cover;
+            background-position: center;
+        }
+        .bg-layer.active { opacity: 1; }
+
+        /* گرادینت‌های زیبا برای حالات مختلف */
+        .bg-clear-day { background: linear-gradient(to bottom, #2980b9, #6dd5fa, #ffffff); }
+        .bg-clear-night { background: linear-gradient(to bottom, #0f2027, #203a43, #2c5364); }
+        .bg-cloudy { background: linear-gradient(to bottom, #304352, #d7d2cc); }
+        .bg-rain { background: linear-gradient(to bottom, #203a43, #2c5364); }
+
+        /* افکت ذرات (باران/برف/ستاره) */
+        .particles {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            pointer-events: none;
+            z-index: 2;
+        }
+
+        /* --- استایل کارت اصلی --- */
+        .main-card {
+            position: relative;
+            z-index: 10;
+            width: 90%;
+            max-width: 420px;
+            height: 85vh;
+            max-height: 800px;
+            background: rgba(20, 20, 30, 0.4);
+            border: 1px solid var(--glass-border);
+            border-radius: 30px;
+            box-shadow: 0 25px 45px rgba(0,0,0,0.3);
+            backdrop-filter: blur(25px);
+            -webkit-backdrop-filter: blur(25px);
+            padding: 25px;
+            color: white;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            overflow-y: auto;
+            transform-style: preserve-3d; /* برای افکت سه بعدی */
+        }
+        
+        /* اسکرول بار مخفی */
+        .main-card::-webkit-scrollbar { width: 0; }
+
+        /* هدر */
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+        }
+        .city-name { font-size: 1.5rem; font-weight: 900; letter-spacing: -0.5px; }
+        .date-small { font-size: 0.8rem; opacity: 0.7; }
+        .live-badge { 
+            font-size: 0.7rem; background: rgba(255,0,0,0.6); 
+            padding: 2px 8px; border-radius: 10px; display: inline-block;
+            animation: pulse 2s infinite;
+        }
+
+        /* دمای بزرگ */
+        .hero-section {
+            text-align: center;
+            position: relative;
+        }
+        .hero-temp {
+            font-size: 5.5rem;
+            font-weight: 800;
+            line-height: 1;
+            text-shadow: 0 10px 30px rgba(0,0,0,0.3);
+            background: linear-gradient(to bottom, #fff, #a1c4fd);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .hero-desc { font-size: 1.2rem; margin-top: 5px; color: #a1c4fd; }
+
+        /* گرید اطلاعات */
+        .info-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 10px;
+        }
+        .info-box {
+            background: rgba(255,255,255,0.05);
+            border-radius: 15px;
+            padding: 10px;
+            text-align: center;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 5px;
+        }
+        .info-box i { font-size: 1.2rem; color: var(--accent); }
+        .info-label { font-size: 0.7rem; opacity: 0.6; }
+        .info-val { font-weight: bold; font-size: 0.9rem; }
+
+        /* بخش نمودار */
+        .chart-container {
+            background: rgba(0,0,0,0.2);
+            border-radius: 20px;
+            padding: 15px;
+            height: 180px;
+            position: relative;
+        }
+
+        /* آلودگی هوا - نوار رنگی */
+        .pollution-bar {
+            height: 6px;
+            width: 100%;
+            background: #333;
+            border-radius: 3px;
+            margin-top: 5px;
+            position: relative;
+            overflow: hidden;
+        }
+        .pollution-fill {
+            height: 100%;
+            width: 0%;
+            background: linear-gradient(90deg, #00f260, #f79d00, #eb5757);
+            border-radius: 3px;
+            transition: width 1s ease;
+        }
+
+        /* انیمیشن‌ها */
+        @keyframes pulse { 0% { opacity: 0.5; } 50% { opacity: 1; } 100% { opacity: 0.5; } }
+        
+        /* افکت باران (CSS Pure) */
+        .rain-drop {
+            position: absolute;
+            background: rgba(255,255,255,0.6);
+            width: 2px;
+            height: 15px;
+            top: -20px;
+            animation: fall linear infinite;
+        }
+        @keyframes fall { to { transform: translateY(100vh); } }
+
+        /* افکت ستاره */
+        .star {
+            position: absolute;
+            background: white;
+            border-radius: 50%;
+            animation: twinkle 3s infinite;
+        }
+        @keyframes twinkle { 0%, 100% { opacity: 0.3; } 50% { opacity: 1; } }
+
+        .loading {
+            position: fixed; inset: 0; background: #000; z-index: 100;
+            display: flex; justify-content: center; align-items: center;
+            color: white; font-size: 1.5rem; transition: opacity 0.5s;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="loading" id="loader">
+        <div>درحال پردازش اطلاعات جوی...</div>
+    </div>
+
+    <div id="bg-layer" class="bg-layer bg-clear-night"></div>
+    <div id="particles" class="particles"></div>
+
+    <div class="main-card" data-tilt data-tilt-max="5" data-tilt-glare data-tilt-max-glare="0.2">
+        
+        <div class="header">
+            <div>
+                <div class="city-name">شاهین‌شهر <span class="live-badge">LIVE</span></div>
+                <div class="date-small" id="date-display">--</div>
+            </div>
+            <div style="text-align: left;">
+                <div style="font-size:1.5rem" id="clock">--:--</div>
+            </div>
+        </div>
+
+        <div class="hero-section">
+            <div class="hero-temp"><span id="temp">--</span>°</div>
+            <div class="hero-desc" id="condition">--</div>
+        </div>
+
+        <div class="info-grid">
+            <div class="info-box">
+                <i class="ph-fill ph-wind"></i>
+                <span class="info-label">باد</span>
+                <span class="info-val" id="wind">-- km/h</span>
+            </div>
+            <div class="info-box">
+                <i class="ph-fill ph-drop"></i>
+                <span class="info-label">رطوبت</span>
+                <span class="info-val" id="humidity">--%</span>
+            </div>
+            <div class="info-box">
+                <i class="ph-fill ph-sun-dim"></i>
+                <span class="info-label">UV اشعه</span>
+                <span class="info-val" id="uv">--</span>
+            </div>
+        </div>
+
+        <div style="background: rgba(255,255,255,0.05); padding: 15px; border-radius: 20px;">
+            <div style="display:flex; justify-content:space-between; margin-bottom:5px;">
+                <span style="font-size:0.9rem">کیفیت هوا (AQI)</span>
+                <span id="aqi-text" style="font-weight:bold; color: #00f260;">--</span>
+            </div>
+            <div class="pollution-bar">
+                <div class="pollution-fill" id="aqi-bar"></div>
+            </div>
+            <div style="margin-top:5px; font-size:0.8rem; opacity:0.6; text-align:left;">
+                PM2.5: <span id="pm25">--</span> | وضعیت: <span id="aqi-val">--</span>
+            </div>
+        </div>
+
+        <div class="chart-container">
+            <canvas id="tempChart"></canvas>
+        </div>
+
+        <div id="forecast-list" style="margin-top: 10px;">
+            </div>
+
+    </div>
+
+    <script>
+        // تنظیمات اولیه
+        const LAT = 32.8633;
+        const LON = 51.5476;
+        
+        // ساعت و تاریخ
+        function updateTime() {
+            const now = new Date();
+            document.getElementById('clock').textContent = now.toLocaleTimeString('fa-IR', {hour:'2-digit', minute:'2-digit'});
+            document.getElementById('date-display').textContent = now.toLocaleDateString('fa-IR', {weekday:'long', day:'numeric', month:'long'});
+        }
+        setInterval(updateTime, 1000);
+
+        // دریافت اطلاعات
+        async function init() {
+            try {
+                // دریافت دیتای هوا + کیفیت هوا در یک درخواست موازی
+                const [weatherRes, airRes] = await Promise.all([
+                    fetch(`https://api.open-meteo.com/v1/forecast?latitude=${LAT}&longitude=${LON}&current=temperature_2m,relative_humidity_2m,weather_code,wind_speed_10m,is_day&hourly=temperature_2m&daily=weather_code,temperature_2m_max,temperature_2m_min,uv_index_max&timezone=auto&forecast_days=3`),
+                    fetch(`https://air-quality-api.open-meteo.com/v1/air-quality?latitude=${LAT}&longitude=${LON}&current=european_aqi,pm2_5`)
+                ]);
+
+                const wData = await weatherRes.json();
+                const aData = await airRes.json();
+
+                updateUI(wData, aData);
+                document.getElementById('loader').style.opacity = 0;
+                setTimeout(() => document.getElementById('loader').style.display = 'none', 500);
+
+            } catch (error) {
+                console.error(error);
+                alert("خطا در ارتباط با سرور");
+            }
+        }
+
+        function updateUI(w, a) {
+            const current = w.current;
+            const daily = w.daily;
+            
+            // 1. اطلاعات اصلی
+            document.getElementById('temp').textContent = Math.round(current.temperature_2m);
+            document.getElementById('wind').textContent = current.wind_speed_10m + " km/h";
+            document.getElementById('humidity').textContent = current.relative_humidity_2m + "%";
+            document.getElementById('uv').textContent = daily.uv_index_max[0];
+            
+            // 2. وضعیت هوا و پس‌زمینه
+            setVisuals(current.weather_code, current.is_day);
+
+            // 3. آلودگی هوا
+            const aqi = a.current.european_aqi;
+            document.getElementById('aqi-val').textContent = aqi;
+            document.getElementById('pm25').textContent = a.current.pm2_5;
+            
+            // انیمیشن نوار آلودگی
+            const aqiPercent = Math.min((aqi / 150) * 100, 100);
+            document.getElementById('aqi-bar').style.width = `${aqiPercent}%`;
+            
+            let aqiStatus = "پاک";
+            let color = "#00f260";
+            if(aqi > 20) { aqiStatus = "سالم"; color="#f2c94c"; }
+            if(aqi > 50) { aqiStatus = "ناسالم"; color="#eb5757"; }
+            const aqiTextEl = document.getElementById('aqi-text');
+            aqiTextEl.textContent = aqiStatus;
+            aqiTextEl.style.color = color;
+
+
+            // 4. رسم نمودار (Chart.js)
+            renderChart(w.hourly.temperature_2m, w.hourly.time);
+
+            // 5. لیست روزهای آینده
+            const listDiv = document.getElementById('forecast-list');
+            listDiv.innerHTML = '';
+            for(let i=1; i<3; i++) {
+                const dayName = new Date(daily.time[i]).toLocaleDateString('fa-IR', {weekday:'long'});
+                const div = document.createElement('div');
+                div.style = "display:flex; justify-content:space-between; padding:10px; border-bottom:1px solid rgba(255,255,255,0.1);";
+                div.innerHTML = `<span>${dayName}</span> <span>${Math.round(daily.temperature_2m_max[i])}° / ${Math.round(daily.temperature_2m_min[i])}°</span>`;
+                listDiv.appendChild(div);
+            }
+        }
+
+        // تابع مدیریت ظاهر (بک‌گراند و متن)
+        function setVisuals(code, isDay) {
+            const bg = document.getElementById('bg-layer');
+            const particles = document.getElementById('particles');
+            const conditionEl = document.getElementById('condition');
+            
+            let bgClass = 'bg-clear-night';
+            let desc = "صاف";
+
+            // پاکسازی ذرات قبلی
+            particles.innerHTML = '';
+
+            if (isDay) bgClass = 'bg-clear-day';
+
+            if (code > 0 && code <= 3) {
+                desc = "کمی ابری";
+                bgClass = 'bg-cloudy';
+            } else if (code >= 51 && code <= 67) {
+                desc = "بارانی";
+                bgClass = 'bg-rain';
+                createRain(particles);
+            } else if (code >= 71) {
+                desc = "برفی";
+                bgClass = 'bg-cloudy'; // یا برفی
+            }
+
+            bg.className = `bg-layer ${bgClass} active`;
+            conditionEl.textContent = desc;
+
+            // اگر شب است و هوا صاف، ستاره اضافه کن
+            if (!isDay && code <= 3) {
+                createStars(particles);
+            }
+        }
+
+        // افکت باران
+        function createRain(container) {
+            for(let i=0; i<50; i++) {
+                const drop = document.createElement('div');
+                drop.className = 'rain-drop';
+                drop.style.left = Math.random() * 100 + '%';
+                drop.style.animationDuration = (Math.random() * 0.5 + 0.5) + 's';
+                drop.style.opacity = Math.random();
+                container.appendChild(drop);
+            }
+        }
+
+        // افکت ستاره
+        function createStars(container) {
+            for(let i=0; i<50; i++) {
+                const star = document.createElement('div');
+                star.className = 'star';
+                const size = Math.random() * 3 + 'px';
+                star.style.width = size;
+                star.style.height = size;
+                star.style.left = Math.random() * 100 + '%';
+                star.style.top = Math.random() * 100 + '%';
+                star.style.animationDelay = Math.random() * 3 + 's';
+                container.appendChild(star);
+            }
+        }
+
+        // رسم نمودار
+        function renderChart(temps, times) {
+            const ctx = document.getElementById('tempChart').getContext('2d');
+            
+            // گرفتن 24 ساعت آینده (از ساعت فعلی)
+            const nowHour = new Date().getHours();
+            const slicedTemps = temps.slice(nowHour, nowHour + 24);
+            const slicedLabels = times.slice(nowHour, nowHour + 24).map(t => new Date(t).getHours() + ':00');
+
+            // ایجاد گرادینت برای زیر نمودار
+            let gradient = ctx.createLinearGradient(0, 0, 0, 400);
+            gradient.addColorStop(0, 'rgba(255, 255, 255, 0.5)');
+            gradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
+
+            new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: slicedLabels,
+                    datasets: [{
+                        label: 'دما',
+                        data: slicedTemps,
+                        borderColor: '#ffffff',
+                        backgroundColor: gradient,
+                        borderWidth: 2,
+                        pointRadius: 0, // حذف نقاط برای نرمی بیشتر
+                        pointHoverRadius: 4,
+                        fill: true,
+                        tension: 0.4 // منحنی نرم
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { display: false }, tooltip: { mode: 'index', intersect: false } },
+                    scales: {
+                        x: { display: false }, // حذف محور X برای زیبایی
+                        y: { display: false }  // حذف محور Y
+                    },
+                    animation: { duration: 2000, easing: 'easeOutQuart' }
+                }
+            });
+        }
+        
+        // اجرای اولیه
+        init();
+
+        // فعال‌سازی افکت Tilt
+        VanillaTilt.init(document.querySelector(".main-card"), {
+            max: 5,
+            speed: 400,
+            glare: true,
+            "max-glare": 0.2,
+        });
+    </script>
+</body>
+</html>
